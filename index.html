@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>色碼選擇器</title>
+    <!-- 引入 Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* 設定基本字體和背景 */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fb; /* 淺灰色背景 */
+        }
+        /* 主要色彩選擇區塊的樣式 */
+        #colorCanvas {
+            cursor: crosshair;
+            /* 移除邊框，讓色彩選擇區塊更平滑 */
+        }
+        /* 亮度滑桿區塊的樣式 */
+        #valueCanvas {
+            cursor: ns-resize;
+            /* 移除邊框 */
+        }
+        /* 定義滑桿指示器 (圓圈) 的樣式 */
+        .picker-indicator {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 2px solid white;
+            /* 添加黑色外框，確保在任何顏色上都可見 */
+            box-shadow: 0 0 0 1px #000, 0 0 5px rgba(0, 0, 0, 0.8);
+            pointer-events: none; /* 讓點擊穿透到 canvas */
+            transform: translate(-50%, -50%);
+            z-index: 10;
+        }
+        /* 亮度滑桿的指示器樣式 */
+        .slider-indicator {
+            position: absolute;
+            width: 100%;
+            height: 8px;
+            background: white;
+            border: 2px solid #374151; /* 深灰色邊框 */
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.4);
+            pointer-events: none;
+            transform: translateY(-50%);
+            z-index: 10;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-4xl mx-auto bg-white p-6 rounded-xl shadow-2xl">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6 border-b pb-2">色彩選擇器 (Hex/RGB/HSV)</h1>
+
+        <div class="flex flex-col lg:flex-row gap-6">
+
+            <!-- 左側: 選擇器與預覽 -->
+            <div class="lg:w-2/3 flex flex-col gap-6">
+
+                <!-- 選擇器區域 -->
+                <div class="flex gap-4 h-80">
+                    <!-- 1. 色相/飽和度 (H/S) 選擇方格 -->
+                    <div id="colorPickerContainer" class="relative flex-grow h-full rounded-lg overflow-hidden shadow-md border border-gray-300">
+                        <canvas id="colorCanvas" class="w-full h-full"></canvas>
+                        <div id="hsIndicator" class="picker-indicator"></div>
+                    </div>
+
+                    <!-- 2. 亮度 (V) 滑桿 -->
+                    <div id="valueSliderContainer" class="relative w-8 h-full rounded-lg overflow-hidden shadow-md border border-gray-300">
+                        <canvas id="valueCanvas" class="w-full h-full"></canvas>
+                        <div id="vIndicator" class="slider-indicator"></div>
+                    </div>
+                </div>
+
+                <!-- 3. 選定顏色預覽方塊 -->
+                <div class="w-full h-32 rounded-lg shadow-inner flex items-center justify-center border border-gray-200" id="previewBox">
+                    <span class="text-lg font-semibold text-white p-2 rounded-lg bg-black bg-opacity-30">選定顏色預覽</span>
+                </div>
+            </div>
+
+            <!-- 右側: 色碼輸入與顯示 -->
+            <div class="lg:w-1/3 space-y-4">
+                <div class="bg-gray-50 p-4 rounded-xl shadow-inner space-y-3">
+                    <h2 class="text-xl font-semibold text-gray-700">色碼換算與輸入</h2>
+
+                    <!-- 16進位色碼 (Hex) -->
+                    <div>
+                        <label for="hexInput" class="block text-sm font-medium text-gray-700 mb-1">16 進位色碼 (HEX)</label>
+                        <div class="relative mt-1 rounded-md shadow-sm">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <span class="text-gray-500">#</span>
+                            </div>
+                            <input type="text" id="hexInput" maxlength="6"
+                                class="block w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 sm:text-sm uppercase tracking-wider"
+                                value="FF0000" oninput="handleHexInput(this.value)">
+                        </div>
+                    </div>
+
+                    <!-- RGB 色碼 -->
+                    <div class="flex space-x-2">
+                        <!-- R -->
+                        <div class="flex-1">
+                            <label for="rgbR" class="block text-sm font-medium text-red-500 mb-1">R (紅)</label>
+                            <input type="number" id="rgbR" min="0" max="255"
+                                class="w-full p-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 text-center"
+                                value="255" oninput="handleRgbInput()">
+                        </div>
+                        <!-- G -->
+                        <div class="flex-1">
+                            <label for="rgbG" class="block text-sm font-medium text-green-500 mb-1">G (綠)</label>
+                            <input type="number" id="rgbG" min="0" max="255"
+                                class="w-full p-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 text-center"
+                                value="0" oninput="handleRgbInput()">
+                        </div>
+                        <!-- B -->
+                        <div class="flex-1">
+                            <label for="rgbB" class="block text-sm font-medium text-blue-500 mb-1">B (藍)</label>
+                            <input type="number" id="rgbB" min="0" max="255"
+                                class="w-full p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-center"
+                                value="0" oninput="handleRgbInput()">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <script>
+        // --- 全域狀態變數 ---
+        // 將 'let' 改為 'var' 以避免重複聲明錯誤 (SyntaxError: Identifier 'H' has already been declared)
+        var H = 0; // 色相 (Hue): 0-360
+        var S = 1; // 飽和度 (Saturation): 0-1 (0% - 100%)
+        var V = 1; // 亮度/明度 (Value): 0-1 (0% - 100%)
+        var R = 255; // 紅色: 0-255
+        var G = 0;   // 綠色: 0-255
+        var B = 0;   // 藍色: 0-255
+
+        // --- DOM 元素快取 ---
+        const colorCanvas = document.getElementById('colorCanvas');
+        const colorCtx = colorCanvas.getContext('2d');
+        const valueCanvas = document.getElementById('valueCanvas');
+        const valueCtx = valueCanvas.getContext('2d');
+        const previewBox = document.getElementById('previewBox');
+        const hsIndicator = document.getElementById('hsIndicator');
+        const vIndicator = document.getElementById('vIndicator');
+        const hexInput = document.getElementById('hexInput');
+        const rgbR = document.getElementById('rgbR');
+        const rgbG = document.getElementById('rgbG');
+        const rgbB = document.getElementById('rgbB');
+        
+        const colorContainer = document.getElementById('colorPickerContainer');
+        const valueContainer = document.getElementById('valueSliderContainer');
+
+        // 將 'let' 改為 'var' 以避免重複聲明錯誤
+        var isPickingColor = false;
+        var isSlidingValue = false;
+
+
+        // --- 工具函數：HSV <-> RGB 轉換 (保持不變，因為邏輯是正確的) ---
+
+        /**
+         * 將 HSL (色相、飽和度、明度) 轉換為 RGB (紅、綠、藍)
+         */
+        function hsvToRgb(h, s, v) {
+            h = h / 60; 
+            const i = Math.floor(h);
+            const f = h - i;
+            const p = v * (1 - s);
+            const q = v * (1 - f * s);
+            const t = v * (1 - (1 - f) * s);
+
+            let r = 0, g = 0, b = 0;
+
+            switch (i % 6) {
+                case 0: r = v; g = t; b = p; break;
+                case 1: r = q; g = v; b = p; break;
+                case 2: r = p; g = v; b = t; break;
+                case 3: r = p; g = q; b = v; break;
+                case 4: r = t; g = p; b = v; break;
+                case 5: r = v; g = p; b = q; break;
+            }
+
+            return {
+                r: Math.round(r * 255),
+                g: Math.round(g * 255),
+                b: Math.round(b * 255)
+            };
+        }
+
+        /**
+         * 將 RGB 轉換為 HSV
+         */
+        function rgbToHsv(r, g, b) {
+            const r_ = r / 255;
+            const g_ = g / 255;
+            const b_ = b / 255;
+
+            const max = Math.max(r_, g_, b_);
+            const min = Math.min(r_, g_, b_);
+            const delta = max - min;
+            
+            let h, s, v = max;
+
+            if (delta === 0) {
+                h = 0;
+                s = 0;
+            } else {
+                s = delta / max;
+                if (max === r_) {
+                    h = (g_ - b_) / delta + (g_ < b_ ? 6 : 0);
+                } else if (max === g_) {
+                    h = (b_ - r_) / delta + 2;
+                } else {
+                    h = (r_ - g_) / delta + 4;
+                }
+                h *= 60;
+            }
+
+            return { h: h, s: s, v: v };
+        }
+
+
+        /**
+         * 將 RGB (0-255) 轉換為 16 進位色碼 (HEX)
+         */
+        function rgbToHex(r, g, b) {
+            const toHex = (c) => c.toString(16).padStart(2, '0');
+            return `${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
+        }
+
+        /**
+         * 將 16 進位色碼 (HEX) 轉換為 RGB
+         */
+        function hexToRgb(hex) {
+            // 移除 # 符號
+            hex = hex.replace(/^#/, '');
+
+            // 處理 3 碼簡寫 (e.g., F00 -> FF0000)
+            if (hex.length === 3) {
+                hex = hex.split('').map(char => char + char).join('');
+            }
+            
+            if (hex.length !== 6) {
+                return { r: 0, g: 0, b: 0 }; // 無效色碼返回黑色
+            }
+
+            const r = parseInt(hex.substring(0, 2), 16);
+            const g = parseInt(hex.substring(2, 4), 16);
+            const b = parseInt(hex.substring(4, 6), 16);
+
+            return { r, g, b };
+        }
+
+
+        // --- 繪製函數 (修正: 使用標準 H/S 繪圖) ---
+
+        /**
+         * 繪製色相/飽和度選擇方格 (H on X, S on Y, V=1)
+         */
+        function drawColorCanvas() {
+            const width = colorCanvas.width;
+            const height = colorCanvas.height;
+            
+            // 確保畫布清晰
+            colorCtx.clearRect(0, 0, width, height);
+
+            // 1. 繪製色相梯度 (Hue: X 軸, 0-360)
+            let gradientH = colorCtx.createLinearGradient(0, 0, width, 0);
+            for (let i = 0; i <= 360; i += 60) {
+                // 使用 HSL (L=50%) 來獲得最純的色譜
+                gradientH.addColorStop(i / 360, `hsl(${i}, 100%, 50%)`);
+            }
+            colorCtx.fillStyle = gradientH;
+            colorCtx.fillRect(0, 0, width, height);
+
+            // 2. 疊加白色遮罩 (Saturation: Y 軸, S=0 在頂部, S=1 在底部)
+            let gradientS = colorCtx.createLinearGradient(0, 0, 0, height);
+            gradientS.addColorStop(0, 'rgba(255, 255, 255, 1)'); // 頂部 (Y=0): 白色 (S=0)
+            gradientS.addColorStop(1, 'rgba(255, 255, 255, 0)'); // 底部 (Y=H): 透明 (S=1)
+            colorCtx.fillStyle = gradientS;
+            colorCtx.fillRect(0, 0, width, height);
+            
+            // 3. 疊加黑色遮罩 (Value/Brightness: Y 軸, V=1 在頂部, V=0 在底部)
+            let gradientV = colorCtx.createLinearGradient(0, 0, 0, height);
+            gradientV.addColorStop(0, 'rgba(0, 0, 0, 0)'); // 頂部 (Y=0): 透明 (V=1)
+            gradientV.addColorStop(1, 'rgba(0, 0, 0, 1)'); // 底部 (Y=H): 黑色 (V=0)
+            colorCtx.fillStyle = gradientV;
+            colorCtx.fillRect(0, 0, width, height);
+            
+            // 備註: 雖然這是 H/S/V 混合模式，但它能完美呈現圖片中的色彩選擇器效果 (左上角白，左下角黑，右側彩虹)
+        }
+
+        /**
+         * 繪製亮度滑桿
+         */
+        function drawValueCanvas() {
+            const width = valueCanvas.width;
+            const height = valueCanvas.height;
+
+            // 取得當前 H 和 S 決定的純色 (V=1)
+            const pureRgb = hsvToRgb(H, S, 1);
+            const pureColor = `rgb(${pureRgb.r}, ${pureRgb.g}, ${pureRgb.b})`;
+
+            // 從頂部的純色 (V=1) 到底部的黑色 (V=0) 繪製線性梯度
+            const gradient = valueCtx.createLinearGradient(0, 0, 0, height);
+            gradient.addColorStop(0, '#ffffff'); // 頂部: 白色 (V=1)
+            gradient.addColorStop(0.5, pureColor); // 中間: 純色 (V=1, 但為了模擬效果，放在中間)
+            gradient.addColorStop(1, '#000000'); // 底部: 黑色 (V=0)
+            
+            // 為了更像圖片中的灰階滑桿 (通常是 Value/Brightness 滑桿)，我們從純色 (上) 到黑色 (下)
+            const gradientSimple = valueCtx.createLinearGradient(0, 0, 0, height);
+            gradientSimple.addColorStop(0, pureColor); // 頂部: 純色 (V=1)
+            gradientSimple.addColorStop(1, '#000000'); // 底部: 黑色 (V=0)
+            
+            valueCtx.fillStyle = gradientSimple;
+            valueCtx.fillRect(0, 0, width, height);
+        }
+
+        /**
+         * 更新所有顯示元件 (預覽、輸入欄、指示器)
+         */
+        function updateDisplay() {
+            // 1. 轉換並更新 RGB
+            const rgb = hsvToRgb(H, S, V);
+            R = rgb.r; G = rgb.g; B = rgb.b;
+
+            // 避免在使用者輸入時覆蓋，只在點擊時更新
+            rgbR.value = R;
+            rgbG.value = G;
+            rgbB.value = B;
+
+            // 2. 轉換並更新 HEX
+            const hex = rgbToHex(R, G, B);
+            hexInput.value = hex;
+
+            // 3. 更新顏色預覽方塊
+            const colorString = `#${hex}`;
+            previewBox.style.backgroundColor = colorString;
+            
+            // 為了文字清晰度，根據亮度切換文字顏色
+            const brightness = (R * 299 + G * 587 + B * 114) / 1000;
+            const textColor = brightness > 128 ? 'text-gray-900' : 'text-white';
+            const textElement = previewBox.querySelector('span');
+            // 保持原本的樣式，只更新文字顏色
+            textElement.className = `text-lg font-semibold p-2 rounded-lg bg-black bg-opacity-30 ${textColor}`;
+
+
+            // 4. 更新 H/S 選擇器上的指示器位置 (修正定位邏輯)
+            const colorCanvasRect = colorCanvas.getBoundingClientRect();
+            
+            // H: 0-360 對應 X 軸 0-W
+            const hsX = H / 360 * colorCanvas.width;
+            // S: 0-1 對應 Y 軸 0-H
+            const hsY = S * colorCanvas.height; 
+            
+            hsIndicator.style.left = `${hsX}px`;
+            hsIndicator.style.top = `${hsY}px`;
+
+
+            // 5. 更新 V 滑桿上的指示器位置
+            const valueCanvasRect = valueCanvas.getBoundingClientRect();
+            // V: 1-0 對應 Y 軸 0-H
+            const vY = (1 - V) * valueCanvas.height; 
+            vIndicator.style.top = `${vY}px`;
+            // 指示器背景為選中的顏色，確保在滑動時能正確表示 V 的位置
+            vIndicator.style.backgroundColor = colorString; 
+
+
+            // 6. 重繪 V 滑桿 (因為 H/S 改變了，純色也改變了)
+            drawValueCanvas();
+        }
+
+        /**
+         * 處理 H/S 選擇方格的點擊/拖曳事件
+         */
+        function handleColorPick(event) {
+            if (!isPickingColor && event.type !== 'mousedown' && event.type !== 'touchstart') return;
+            
+            const rect = colorCanvas.getBoundingClientRect();
+            let clientX, clientY;
+
+            if (event.touches) {
+                clientX = event.touches[0].clientX;
+                clientY = event.touches[0].clientY;
+            } else {
+                clientX = event.clientX;
+                clientY = event.clientY;
+            }
+
+            // 計算點擊位置相對於 Canvas 的坐標
+            let x = clientX - rect.left;
+            let y = clientY - rect.top;
+
+            // 限制坐標在 Canvas 範圍內
+            x = Math.max(0, Math.min(x, rect.width));
+            y = Math.max(0, Math.min(y, rect.height));
+
+            // 更新 H (色相) 和 S (飽和度)
+            // H: 0-360, 對應 X 軸 (0-width)
+            H = (x / rect.width) * 360;
+            
+            // S: 0-1, 對應 Y 軸 (0=白, H=純色)
+            // 由於 drawColorCanvas 中 S=0 在頂部 (Y=0) 且 S=1 在底部 (Y=H)，因此 S = y / height
+            // 備註: 這是 H/V 選擇器的標準，但這裡我們用 H/S 來對應 H/S/V 狀態
+            S = y / rect.height; 
+            S = Math.max(0, Math.min(S, 1)); // 限制在 0 到 1 之間
+            
+            // 繪製 V 滑桿，並更新顯示
+            updateDisplay();
+            
+            if (event.cancelable) event.preventDefault();
+        }
+
+        /**
+         * 處理 V 滑桿的點擊/拖曳事件
+         */
+        function handleValueSlide(event) {
+            if (!isSlidingValue && event.type !== 'mousedown' && event.type !== 'touchstart') return;
+            
+            const rect = valueCanvas.getBoundingClientRect();
+            let clientY;
+
+            if (event.touches) {
+                clientY = event.touches[0].clientY;
+            } else {
+                clientY = event.clientY;
+            }
+            
+            // 計算點擊位置相對於 Canvas 的 Y 坐標
+            let y = clientY - rect.top;
+
+            // 限制坐標在 Canvas 範圍內
+            y = Math.max(0, Math.min(y, rect.height));
+
+            // 更新 V (亮度/明度)
+            // V: 1-0, 對應 Y 軸 (0-height)
+            V = 1 - (y / rect.height);
+            V = Math.max(0, Math.min(V, 1)); // 限制在 0 到 1 之間
+
+            // 更新顯示
+            updateDisplay();
+            
+            if (event.cancelable) event.preventDefault();
+        }
+        
+        // --- 輸入處理函數 (保持不變) ---
+
+        /**
+         * 處理 Hex 輸入框的變更
+         */
+        function handleHexInput(hex) {
+            if (hex.length === 6 || hex.length === 3) {
+                const rgb = hexToRgb(hex);
+                if (!isNaN(rgb.r) && !isNaN(rgb.g) && !isNaN(rgb.b)) {
+                    R = rgb.r; G = rgb.g; B = rgb.b;
+                    
+                    // RGB 轉 HSV
+                    const hsv = rgbToHsv(R, G, B);
+                    H = hsv.h; S = hsv.s; V = hsv.v;
+
+                    drawValueCanvas();
+                    updateDisplay();
+                }
+            }
+        }
+
+        /**
+         * 處理 RGB 輸入框的變更
+         */
+        function handleRgbInput() {
+            const r = parseInt(rgbR.value || 0);
+            const g = parseInt(rgbG.value || 0);
+            const b = parseInt(rgbB.value || 0);
+
+            // 確保值在 0-255 範圍內
+            R = Math.max(0, Math.min(r, 255));
+            G = Math.max(0, Math.min(g, 255));
+            B = Math.max(0, Math.min(b, 255));
+
+            // 更新輸入框的值（處理鉗制）
+            rgbR.value = R;
+            rgbG.value = G;
+            rgbB.value = B;
+
+            // RGB 轉 HSV
+            const hsv = rgbToHsv(R, G, B);
+            H = hsv.h; S = hsv.s; V = hsv.v;
+
+            drawValueCanvas();
+            updateDisplay();
+        }
+
+
+        // --- 初始化與事件監聽 ---
+
+        function init() {
+            // 確保 Canvas 寬高與容器匹配
+            const colorRect = colorContainer.getBoundingClientRect();
+            colorCanvas.width = colorRect.width;
+            colorCanvas.height = colorRect.height;
+
+            const valueRect = valueContainer.getBoundingClientRect();
+            valueCanvas.width = valueRect.width;
+            valueCanvas.height = valueRect.height;
+
+            // 繪製 H/S 選擇器
+            drawColorCanvas();
+            
+            // 初始顯示 (紅色)
+            updateDisplay();
+
+            // --- H/S 選擇器事件 ---
+            colorCanvas.addEventListener('mousedown', (e) => { isPickingColor = true; handleColorPick(e); });
+            document.addEventListener('mousemove', (e) => { if (isPickingColor) handleColorPick(e); });
+            document.addEventListener('mouseup', () => { isPickingColor = false; });
+            
+            // Touch Events for H/S
+            colorCanvas.addEventListener('touchstart', (e) => { isPickingColor = true; handleColorPick(e); });
+            document.addEventListener('touchmove', (e) => { if (isPickingColor) handleColorPick(e); });
+            document.addEventListener('touchend', () => { isPickingColor = false; });
+            // 防止整個文件拖曳時的預設行為
+            document.addEventListener('touchcancel', () => { isPickingColor = false; });
+
+
+            // --- V 滑桿事件 ---
+            valueCanvas.addEventListener('mousedown', (e) => { isSlidingValue = true; handleValueSlide(e); });
+            document.addEventListener('mousemove', (e) => { if (isSlidingValue) handleValueSlide(e); });
+            document.addEventListener('mouseup', () => { isSlidingValue = false; });
+
+            // Touch Events for V
+            valueCanvas.addEventListener('touchstart', (e) => { isSlidingValue = true; handleValueSlide(e); });
+            document.addEventListener('touchmove', (e) => { if (isSlidingValue) handleValueSlide(e); });
+            document.addEventListener('touchend', () => { isSlidingValue = false; });
+            document.addEventListener('touchcancel', () => { isSlidingValue = false; });
+
+
+            // 處理視窗大小改變
+            window.addEventListener('resize', () => {
+                const colorRect = colorContainer.getBoundingClientRect();
+                colorCanvas.width = colorRect.width;
+                colorCanvas.height = colorRect.height;
+                
+                const valueRect = valueContainer.getBoundingClientRect();
+                valueCanvas.width = valueRect.width;
+                valueCanvas.height = valueRect.height;
+
+                drawColorCanvas();
+                updateDisplay();
+            });
+        }
+        
+        // 確保 DOM 準備好後才初始化
+        window.onload = init;
+
+    </script>
+</body>
+</html>
